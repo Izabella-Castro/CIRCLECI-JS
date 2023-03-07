@@ -1,28 +1,42 @@
+
 version: 2.1
+orbs:
+  node: circleci/node@5.0.2
+  heroku: circleci/heroku@1.2.6
 
 jobs:
-  build:
-    working_directory: ~/circleci-js
-    docker:
-      - image: "circleci/node:14"
+  build_and_test:
+    executor: node/default
     steps:
       - checkout
-      - run: npm install
-      - run: npm run build
-  test:
-    working_directory: ~/circleci-js
-    docker:
-      - image: "circleci/node:14"
+      - node/install-packages:
+          pkg-manager: yarn
+      - run:
+          command: yarn test
+          name: Run tests
+      - run:
+          command: yarn build
+          name: Build app
+      - persist_to_workspace:
+          root: ~/circleci-js
+          paths:
+            - .
+
+  deploy: # this can be any name you choose
+    executor: heroku/default
     steps:
-      - checkout
-      - run: cd web && npm install
-      - run: cd web && npm run lint
-      - run: cd web && npm run build
-      - run: cd web && npm run test:coverage
+      - attach_workspace:
+          at: ~/circleci-js
+      - heroku/deploy-via-git:
+          force: true # force push when pushing to the heroku remote, see: https://devcenter.heroku.com/articles/git
 
 workflows:
- version: 2
-  concurrently:
+  test_my_app:
     jobs:
-      - cloud-functions
-      - web
+      - build_and_test
+      - deploy:
+          requires:
+            - build_and_test # only deploy if the build_and_test job has completed
+          filters:
+            branches:
+              only: main # only deploy when on main
